@@ -243,13 +243,12 @@ deltaStart = 2*math.pi*100*10**6
 deltaEnd = 2*math.pi*100*10**8
 deltaTest = 2*math.pi*100*10**7
 nDelta = 8
-limit=8
+limit=8 #limits the interaction between particles to a certain range, since it scales with r^-6, it can definitely be neglected at a certain range
 nParticles = 10
-nSup=2.1
-r1= 20*10**-9 #Rb = 9 mum for omega = 2 pi * 2 MHz
-minMagnS=-2
-nSing = 7
-whichH = "RyNs"
+nSup=2.1 
+r1= 20*10**-9 #spacing between atoms. Rb = 9 mum for omega = 2 pi * 2 MHz
+nSing = 7 #number of singular values considered
+whichH = "RyNs" #type of Hamiltonian
 computeAndCompareSVDApprox(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, nSup, whichH, limit, nParticles, nSing)
 # printEigVecWithBase(computeHighStateIsing(deltaStart, omegaStart, ns, limit, nParticles))
 # calculateReducedHamiltonian(0,u,2)
