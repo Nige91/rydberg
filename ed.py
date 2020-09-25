@@ -9,6 +9,7 @@ import numpy as np
 import random as rnd
 from numpy import linalg as LA
 from scipy.sparse.linalg import eigsh
+import scipy.sparse as sp
 import math
 
 constantC = 6.678*(10**-42)
@@ -50,118 +51,86 @@ def calculateInteractionRydbergR1(r1, n):
 
 def createSingleParticleOperator(operator, nParticles, nParticle):
     if(nParticle == 1):
-        return np.kron(operator, np.identity(2**(nParticles-1)))
+        return sp.kron(operator, sp.identity(2**(nParticles-1)))
     elif(nParticle == nParticles):
-        return np.kron(np.identity(2**(nParticles-1)),operator)
+        return sp.kron(sp.identity(2**(nParticles-1)),operator)
     else:
-        return np.kron(np.kron(np.identity(2**(nParticle-1)),operator), np.identity(2**(nParticles-nParticle)))
+        return sp.kron(sp.kron(sp.identity(2**(nParticle-1)),operator), sp.identity(2**(nParticles-nParticle)))
 
 def createHamiltonianTransverse(factor, nParticles):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    sigmax=np.matrix('0,1;1,0')
+    result = sp.coo_matrix((2**nParticles, 2**nParticles))
+    sigmax=sp.coo_matrix(np.matrix('0,1;1,0'))
     for i in range(nParticles):
         result += createSingleParticleOperator(sigmax, nParticles, i+1)
     return factor*result
 
 def createHamiltonianLongitudinal(factor, nParticles):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    sigmaz=np.matrix('1,0;0,-1')
+    result = sp.coo_matrix((2**nParticles, 2**nParticles))
+    sigmaz=sp.coo_matrix(np.matrix('1,0;0,-1'))
     for i in range(nParticles):
         result += createSingleParticleOperator(sigmaz, nParticles, i+1)
     return factor*result
 
 def createHamiltonianNRydberg(factor, nParticles):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    n_op=np.matrix('1,0;0,0')
+    result = sp.coo_matrix((2**nParticles, 2**nParticles))
+    n_op=sp.coo_matrix(np.matrix('1,0;0,0'))
     for i in range(nParticles):
         result += createSingleParticleOperator(n_op, nParticles, i+1)
     return factor*result
 
-def createHamiltonianInteractionPauliNs(omega, ns, nParticles, limit=0):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    sigmaz=np.matrix('1,0;0,-1')
+def createHamiltonianInteraction(omega, r1ns, which, nParticles, limit=0):
+    result = sp.coo_matrix((2**nParticles, 2**nParticles))
+    op = sp.coo_matrix((2, 2))
+    if which == "IsR1" or which == "IsNs":
+        op = sp.coo_matrix(np.matrix('1,0;0,-1'))
+    elif which == "RyR1" or which == "RyNs":
+        op = sp.coo_matrix(np.matrix('1,0;0,0'))
     for i in range(nParticles):
         maxj = nParticles
         if limit!=0 and nParticles > i+2+limit:
             maxj = i+1+limit
         for j in range(i+1,maxj):
-            v=calculateInteractionPauliNs(omega, ns, j-i)
-            result += v*createSingleParticleOperator(sigmaz, nParticles, i+1)*createSingleParticleOperator(sigmaz, nParticles, j+1)
+            factor=0
+            if which == "IsR1":
+                factor=calculateInteractionPauliR1(r1ns, j-i)
+            elif which == "IsNs":
+                factor=calculateInteractionPauliNs(omega, r1ns, j-i)
+            elif which == "RyR1":
+                factor=calculateInteractionRydbergR1(r1ns, j-i)
+            elif which == "RyNs":
+                factor=calculateInteractionRydbergNs(omega, r1ns, j-i)
+            else:
+                raise NameError('invalied Hamiltonian type:'+which)
+            result += factor*createSingleParticleOperator(op, nParticles, i+1)*createSingleParticleOperator(op, nParticles, j+1)
     return result
 
-def createHamiltonianInteractionPauliR1(r1, nParticles, limit=0):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    sigmaz=np.matrix('1,0;0,-1')
-    for i in range(nParticles):
-        maxj = nParticles
-        if limit!=0 and nParticles > i+2+limit:
-            maxj = i+1+limit
-        for j in range(i+1,maxj):
-            v=calculateInteractionPauliR1(r1, j-i)
-            result += v*createSingleParticleOperator(sigmaz, nParticles, i+1)*createSingleParticleOperator(sigmaz, nParticles, j+1)
-    return result
-
-def createHamiltonianInteractionRydbergNs(omega, ns, nParticles, limit=0):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    n_op=np.matrix('1,0;0,0')
-    for i in range(nParticles):
-        maxj = nParticles
-        if limit!=0 and nParticles > i+2+limit:
-            maxj = i+1+limit
-        for j in range(i+1,maxj):
-            v=calculateInteractionRydbergNs(omega, ns, j-i)
-            result += v*createSingleParticleOperator(n_op, nParticles, i+1)*createSingleParticleOperator(n_op, nParticles, j+1)
-    return result
-
-def createHamiltonianInteractionRydbergR1(r1, nParticles, limit=0):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    n_op=np.matrix('1,0;0,0')
-    for i in range(nParticles):
-        maxj = nParticles
-        if limit!=0 and nParticles > i+2+limit:
-            maxj = i+1+limit
-        for j in range(i+1,maxj):
-            v=calculateInteractionRydbergR1(r1, j-i)
-            result += v*createSingleParticleOperator(n_op, nParticles, i+1)*createSingleParticleOperator(n_op, nParticles, j+1)
-    return result
-
-def createFullIsingHamiltonianNs(delta, omega, ns, limit, nParticles):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    result += createHamiltonianTransverse(calculateTFieldIsing(omega), nParticles)
-    result += createHamiltonianLongitudinal(calculateLFieldIsingNs(delta,omega,ns), nParticles)
-    result += createHamiltonianInteractionPauliNs(omega, ns, nParticles, limit)
-    return result
-
-def createFullIsingHamiltonianR1(delta, omega, r1, limit, nParticles):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    result += createHamiltonianTransverse(calculateTFieldIsing(omega), nParticles)
-    result += createHamiltonianLongitudinal(calculateLFieldIsingR1(delta,r1), nParticles)
-    result += createHamiltonianInteractionPauliR1(r1, nParticles, limit)
-    return result
-
-def createFullRydbergHamiltonianNs(delta, omega, ns, limit, nParticles):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    result += createHamiltonianTransverse(calculateTFieldRydberg(omega), nParticles)
-    result += createHamiltonianNRydberg(calculateLFieldRydberg(delta), nParticles)
-    result += createHamiltonianInteractionRydbergNs(omega, ns, nParticles, limit)
-    return result
-
-def createFullRydbergHamiltonianR1(delta, omega, r1, limit, nParticles):
-    result = np.zeros([2**nParticles, 2**nParticles])
-    result += createHamiltonianTransverse(calculateTFieldRydberg(omega), nParticles)
-    result += createHamiltonianNRydberg(calculateLFieldRydberg(delta), nParticles)
-    result += createHamiltonianInteractionRydbergR1(r1, nParticles, limit)
+def createFullHamiltonian(delta, omega, r1ns, which, limit, nParticles):
+    result = sp.coo_matrix((2**nParticles, 2**nParticles))
+    if which == "IsR1":
+        result += createHamiltonianTransverse(calculateTFieldIsing(omega), nParticles)
+        result += createHamiltonianLongitudinal(calculateLFieldIsingR1(delta,r1), nParticles)
+        result += createHamiltonianInteraction(omega, r1ns, which, nParticles, limit)
+    elif which == "IsNs":
+        result += createHamiltonianTransverse(calculateTFieldIsing(omega), nParticles)
+        result += createHamiltonianLongitudinal(calculateLFieldIsingNs(delta, omega, r1ns), nParticles)
+        result += createHamiltonianInteraction(omega, r1ns, which, nParticles, limit)
+    elif which == "RyR1":
+        result += createHamiltonianTransverse(calculateTFieldRydberg(omega), nParticles)
+        result += createHamiltonianLongitudinal(calculateLFieldRydberg(delta), nParticles)
+        result += createHamiltonianInteraction(omega, r1ns, which, nParticles, limit)
+    elif which == "RyNs":
+        result += createHamiltonianTransverse(calculateTFieldRydberg(omega), nParticles)
+        result += createHamiltonianLongitudinal(calculateLFieldRydberg(delta), nParticles)
+        result += createHamiltonianInteraction(omega, r1ns, which, nParticles, limit)
     return result
 
 def computeGroundState(H):
-    nDim = H.shape[0]
-    eigvals, eigvecs = eigsh(H, nDim, which="SM")
+    eigvals, eigvecs = eigsh(H, 1, which="SA")
     return eigvecs[:,0]
 
 def computeHighState(H):
-    nDim = H.shape[0]
-    eigvals, eigvecs = eigsh(H, nDim, which="SM")
-    return eigvecs[:,eigvecs.shape[1]-1]
+    eigvals, eigvecs = eigsh(H, 1, which="LA")
+    return eigvecs[:,0]
 
 def logarithmicSteps(start, end, nSteps):
     factor=(end/start)**(1/(nSteps-1))
@@ -177,8 +146,7 @@ def logarithmicStepsBetween(start, end, nSteps):
         result[i]=start*(factor**(i+0.5))
     return result
 
-
-def computeSnapshotMatrixIsingNs(deltaStart, deltaEnd, nDelta, omegaStart, omegaEnd, nOmega, ns, limit, nParticles):
+def computeSnapshotMatrix(deltaStart, deltaEnd, nDelta, omegaStart, omegaEnd, nOmega, r1ns, whichH, limit, nParticles):
     stepsDelta=logarithmicSteps(deltaStart, deltaEnd, nDelta)
     stepsOmega=logarithmicSteps(omegaStart, omegaEnd, nOmega)
     print("Steps Delta")
@@ -188,49 +156,10 @@ def computeSnapshotMatrixIsingNs(deltaStart, deltaEnd, nDelta, omegaStart, omega
     result = np.zeros(shape=(2**nParticles,nDelta*nOmega))
     for i in range(nDelta):
         for j in range(nOmega):
-            result[:,i*nOmega + j]=computeGroundState(createFullIsingHamiltonianNs(stepsDelta[i], stepsOmega[j], ns, limit, nParticles))
+            result[:,i*nOmega + j]=computeGroundState(createFullHamiltonian(stepsDelta[i], stepsOmega[j], r1ns, whichH, limit, nParticles))
     return result
 
-def computeSnapshotMatrixIsingR1(deltaStart, deltaEnd, nDelta, omegaStart, omegaEnd, nOmega, r1, limit, nParticles):
-    stepsDelta=logarithmicSteps(deltaStart, deltaEnd, nDelta)
-    stepsOmega=logarithmicSteps(omegaStart, omegaEnd, nOmega)
-    print("Steps Delta")
-    print(stepsDelta)
-    print("Steps Omega")
-    print(stepsOmega)
-    result = np.zeros(shape=(2**nParticles,nDelta*nOmega))
-    for i in range(nDelta):
-        for j in range(nOmega):
-            result[:,i*nOmega + j]=computeGroundState(createFullIsingHamiltonianR1(stepsDelta[i], stepsOmega[j], r1, limit, nParticles))
-    return result
-
-def computeSnapshotMatrixRydbergNs(deltaStart, deltaEnd, nDelta, omegaStart, omegaEnd, nOmega, ns, limit, nParticles):
-    stepsDelta=logarithmicSteps(deltaStart, deltaEnd, nDelta)
-    stepsOmega=logarithmicSteps(omegaStart, omegaEnd, nOmega)
-    print("Steps Delta")
-    print(stepsDelta)
-    print("Steps Omega")
-    print(stepsOmega)
-    result = np.zeros(shape=(2**nParticles,nDelta*nOmega))
-    for i in range(nDelta):
-        for j in range(nOmega):
-            result[:,i*nOmega + j]=computeGroundState(createFullRydbergHamiltonianNs(stepsDelta[i], stepsOmega[j], ns, limit, nParticles))
-    return result
-
-def computeSnapshotMatrixRydbergR1(deltaStart, deltaEnd, nDelta, omegaStart, omegaEnd, nOmega, r1, limit, nParticles):
-    stepsDelta=logarithmicSteps(deltaStart, deltaEnd, nDelta)
-    stepsOmega=logarithmicSteps(omegaStart, omegaEnd, nOmega)
-    print("Steps Delta")
-    print(stepsDelta)
-    print("Steps Omega")
-    print(stepsOmega)
-    result = np.zeros(shape=(2**nParticles,nDelta*nOmega))
-    for i in range(nDelta):
-        for j in range(nOmega):
-            result[:,i*nOmega + j]=computeGroundState(createFullRydbergHamiltonianR1(stepsDelta[i], stepsOmega[j], r1, limit, nParticles))
-    return result
-
-def computeRelErrorGridIsingNs(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, var, limit, nParticles, B):
+def computeRelErrorGrid(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, r1ns, whichH, limit, nParticles, B):
     stepsDelta=logarithmicStepsBetween(deltaStart, deltaEnd, nDelta)
     stepsOmega=logarithmicStepsBetween(omegaStart, omegaEnd, nOmega)
     print("Steps Delta Between")
@@ -240,82 +169,13 @@ def computeRelErrorGridIsingNs(deltaStart, deltaEnd, deltaTest, nDelta, omegaSta
     result = np.zeros((nDelta-1, nOmega-1))
     for i in range(nDelta-1):
         for j in range(nOmega-1):
-            H = createFullIsingHamiltonianNs(stepsDelta[i], stepsOmega[j], var, limit, nParticles)
-            h = calculateReducedHamiltonian(H, B)
+            H = createFullHamiltonian(stepsDelta[i], stepsOmega[j], r1ns, whichH, limit, nParticles)
+            h = calculateReducedHamiltonian(H.toarray(), B)
             hGround = computeGroundState(h)
             HGroundAppr = np.dot(B,hGround)
             HGround = computeGroundState(H)
             error=np.zeros(2**nParticles)
-            if (HGround[0]- HGroundAppr[0]) < HGround[0]:
-                error=HGround[0] - HGroundAppr[0]
-            else:
-                error=HGround[0] + HGroundAppr[0]
-            result[i][j]=LA.norm(error)/LA.norm(HGround)
-    return result
-
-def computeRelErrorGridRydbergNs(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, var, limit, nParticles, B):
-    stepsDelta=logarithmicStepsBetween(deltaStart, deltaEnd, nDelta)
-    stepsOmega=logarithmicStepsBetween(omegaStart, omegaEnd, nOmega)
-    print("Steps Delta Between")
-    print(stepsDelta)
-    print("Steps Omega Between")
-    print(stepsOmega)
-    result = np.zeros((nDelta-1, nOmega-1))
-    for i in range(nDelta-1):
-        for j in range(nOmega-1):
-            H = createFullRydbergHamiltonianNs(stepsDelta[i], stepsOmega[j], var, limit, nParticles)
-            h = calculateReducedHamiltonian(H, B)
-            hGround = computeGroundState(h)
-            HGroundAppr = np.dot(B,hGround)
-            HGround = computeGroundState(H)
-            error=np.zeros(2**nParticles)
-            if (HGround[0]- HGroundAppr[0]) < HGround[0]:
-                error=HGround[0] - HGroundAppr[0]
-            else:
-                error=HGround[0] + HGroundAppr[0]
-            result[i][j]=LA.norm(error)/LA.norm(HGround)
-    return result
-
-def computeRelErrorGridIsingR1(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, var, limit, nParticles, B):
-    stepsDelta=logarithmicStepsBetween(deltaStart, deltaEnd, nDelta)
-    stepsOmega=logarithmicStepsBetween(omegaStart, omegaEnd, nOmega)
-    print("Steps Delta Between")
-    print(stepsDelta)
-    print("Steps Omega Between")
-    print(stepsOmega)
-    result = np.zeros((nDelta-1, nOmega-1))
-    for i in range(nDelta-1):
-        for j in range(nOmega-1):
-            H = createFullIsingHamiltonianR1(stepsDelta[i], stepsOmega[j], var, limit, nParticles)
-            h = calculateReducedHamiltonian(H, B)
-            hGround = computeGroundState(h)
-            HGroundAppr = np.dot(B,hGround)
-            HGround = computeGroundState(H)
-            error=np.zeros(2**nParticles)
-            if (HGround[0]- HGroundAppr[0]) < HGround[0]:
-                error=HGround[0] - HGroundAppr[0]
-            else:
-                error=HGround[0] + HGroundAppr[0]
-            result[i][j]=LA.norm(error)/LA.norm(HGround)
-    return result
-
-def computeRelErrorGridRydbergR1(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, var, limit, nParticles, B):
-    stepsDelta=logarithmicStepsBetween(deltaStart, deltaEnd, nDelta)
-    stepsOmega=logarithmicStepsBetween(omegaStart, omegaEnd, nOmega)
-    print("Steps Delta Between")
-    print(stepsDelta)
-    print("Steps Omega Between")
-    print(stepsOmega)
-    result = np.zeros((nDelta-1, nOmega-1))
-    for i in range(nDelta-1):
-        for j in range(nOmega-1):
-            H = createFullRydbergHamiltonianR1(stepsDelta[i], stepsOmega[j], var, limit, nParticles)
-            h = calculateReducedHamiltonian(H, B)
-            hGround = computeGroundState(h)
-            HGroundAppr = np.dot(B,hGround)
-            HGround = computeGroundState(H)
-            error=np.zeros(2**nParticles)
-            if (HGround[0]- HGroundAppr[0]) < HGround[0]:
+            if abs(HGround[0]- HGroundAppr[0]) < abs(HGround[0]):
                 error=HGround[0] - HGroundAppr[0]
             else:
                 error=HGround[0] + HGroundAppr[0]
@@ -353,8 +213,8 @@ def printEigVecWithBase(v):
         print(bin(i))
         print(v[i])
 
-def computeAndCompareSVDApprox(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, var, limit, nParticles, nSing):
-    A = computeSnapshotMatrixIsingNs(deltaStart, deltaEnd, nDelta, omegaStart, omegaEnd, nOmega, var, limit, nParticles)
+def computeAndCompareSVDApprox(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, r1ns, whichH, limit, nParticles, nSing):
+    A = computeSnapshotMatrix(deltaStart, deltaEnd, nDelta, omegaStart, omegaEnd, nOmega, r1ns, whichH, limit, nParticles)
     u, s, v = LA.svd(A)
     print("Singular values")
     print(s)
@@ -362,7 +222,7 @@ def computeAndCompareSVDApprox(deltaStart, deltaEnd, deltaTest, nDelta, omegaSta
     print("Number of Singular Values considered")
     print(nSing)
     B = extractBFromU(u,nSing)
-    errorGrid = computeRelErrorGridIsingNs(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, var, limit, nParticles, B)
+    errorGrid = computeRelErrorGrid(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, r1ns, whichH, limit, nParticles, B)
     maxErrorRel=np.amax(errorGrid)
     minErrorRel=np.amin(errorGrid)
     print("error grid")
@@ -384,18 +244,19 @@ deltaEnd = 2*math.pi*100*10**8
 deltaTest = 2*math.pi*100*10**7
 nDelta = 8
 limit=8
-nParticles = 8
+nParticles = 10
 nSup=2.1
 r1= 20*10**-9 #Rb = 9 mum for omega = 2 pi * 2 MHz
 minMagnS=-2
 nSing = 7
-computeAndCompareSVDApprox(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, nSup, limit, nParticles, nSing)
+whichH = "RyNs"
+computeAndCompareSVDApprox(deltaStart, deltaEnd, deltaTest, nDelta, omegaStart, omegaEnd, omegaTest, nOmega, nSup, whichH, limit, nParticles, nSing)
 # printEigVecWithBase(computeHighStateIsing(deltaStart, omegaStart, ns, limit, nParticles))
 # calculateReducedHamiltonian(0,u,2)
-# H = createFullRydbergHamiltonianNs(deltaStart, omegaStart, ns,limit,nParticles)
+# H = createFullRydbergHamiltonianNs(deltaStart, omegaStart, nSup,limit,nParticles)
 # print("H done")
 # nDim = H.shape[0]
-# eigvals, eigvecs = eigsh(H, nDim, which="SM")
+# eigvals, eigvecs = eigsh(H, nEigv, which="SA")
 # print(eigvals)
 # printEigVecWithBase(eigvecs[:,eigvecs.shape[1]-1])
 # u, s, v = LA.svd(np.transpose(eigvecs))
